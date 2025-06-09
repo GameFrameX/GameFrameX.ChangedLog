@@ -16,11 +16,34 @@ class Program
 {
     static async Task<int> Main(string[] args)
     {
-        return await Parser.Default.ParseArguments<Options>(args)
-                           .MapResult(
-                               async (Options opts) => await RunAsync(opts),
-                               errs => Task.FromResult(1)
-                           );
+        // 优先使用环境变量，如果没有则使用命令行参数
+        var options = GetOptionsFromEnvironmentOrArgs(args);
+        
+        return await RunAsync(options);
+    }
+
+    static Options GetOptionsFromEnvironmentOrArgs(string[] args)
+    {
+        // 从环境变量获取配置
+        var repositoryPath = Environment.GetEnvironmentVariable("CHANGELOG_REPOSITORY_PATH") ?? ".";
+        var outputPath = Environment.GetEnvironmentVariable("CHANGELOG_OUTPUT_PATH") ?? "CHANGELOG.md";
+        
+        // 如果有命令行参数，则解析命令行参数
+        if (args.Length > 0)
+        {
+            var result = Parser.Default.ParseArguments<Options>(args);
+            if (result is Parsed<Options> parsed)
+            {
+                return parsed.Value;
+            }
+        }
+        
+        // 使用环境变量创建Options
+        return new Options
+        {
+            Repository = repositoryPath,
+            Output = outputPath
+        };
     }
 
     static async Task<int> RunAsync(Options options)
