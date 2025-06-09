@@ -8,8 +8,8 @@ public class Options
     [Option("output", Required = false, Default = "CHANGELOG.md", HelpText = "Output file path")]
     public string Output { get; set; } = "CHANGELOG.md";
 
-    [Option("repository", Required = false, Default = ".", HelpText = "Repository path")]
-    public string Repository { get; set; } = ".";
+    [Option("repository", Required = false, Default = "./repository", HelpText = "Repository path")]
+    public string Repository { get; set; } = "./repository";
 }
 
 class Program
@@ -18,7 +18,7 @@ class Program
     {
         // 优先使用环境变量，如果没有则使用命令行参数
         var options = GetOptionsFromEnvironmentOrArgs(args);
-        
+
         return await RunAsync(options);
     }
 
@@ -27,7 +27,7 @@ class Program
         // 从环境变量获取配置
         var repositoryPath = Environment.GetEnvironmentVariable("CHANGELOG_REPOSITORY_PATH") ?? ".";
         var outputPath = Environment.GetEnvironmentVariable("CHANGELOG_OUTPUT_PATH") ?? "CHANGELOG.md";
-        
+
         // 如果有命令行参数，则解析命令行参数
         if (args.Length > 0)
         {
