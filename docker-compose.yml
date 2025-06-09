@@ -1,0 +1,12 @@
+services:
+  changelog-generator:
+    build:
+      context: .
+      dockerfile: src/Dockerfile
+    user: root
+    environment:
+      - CHANGELOG_REPOSITORY_PATH=/app/repository
+      - CHANGELOG_OUTPUT_PATH=/app/output/CHANGELOG.md
+    volumes:
+      - ./../GameFrameX.Foundation:/app/repository  # 挂载Git仓库（只读）
+      - ./output:/app/output       # 挂载输出目录
