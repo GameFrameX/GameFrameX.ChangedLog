@@ -241,7 +241,6 @@ dotnet test --collect:"XPlat Code Coverage"
 
 - 📋 [提交Issue](https://github.com/gameframex/GameFrameX.ChangedLog/issues)
 - 💬 [讨论区](https://github.com/gameframex/GameFrameX.ChangedLog/discussions)
-- 📧 邮件联系：support@gameframex.com
 
 ---
 
