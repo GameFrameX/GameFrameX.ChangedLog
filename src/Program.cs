@@ -34,10 +34,20 @@ class Program
             var result = Parser.Default.ParseArguments<Options>(args);
             if (result is Parsed<Options> parsed)
             {
+                if (!Directory.Exists(parsed.Value.Repository))
+                {
+                    Directory.CreateDirectory(parsed.Value.Repository);
+                }
+
                 return parsed.Value;
             }
         }
-        
+
+        if (!Directory.Exists(repositoryPath))
+        {
+            Directory.CreateDirectory(repositoryPath);
+        }
+
         // 使用环境变量创建Options
         return new Options
         {
