@@ -19,8 +19,8 @@ public class ChangelogService
 
         // 添加标题
         changelog.AppendLine("# Changelog");
-        changelog.AppendLine();
-        changelog.AppendLine("All notable changes to this project will be documented in this file.");
+        // changelog.AppendLine();
+        // changelog.AppendLine("All notable changes to this project will be documented in this file.");
         changelog.AppendLine();
 
         if (tags.Count == 0)
