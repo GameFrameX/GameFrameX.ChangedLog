@@ -1,0 +1,39 @@
+name: Generate Changelog
+
+on:
+  push:
+    tags:
+      - '*'
+  workflow_dispatch:
+
+jobs:
+  generate-changelog:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # 获取完整的Git历史
+        
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v3
+      with:
+        dotnet-version: '8.0.x'
+        
+    - name: Restore dependencies
+      run: dotnet restore GameFrameX.ChangedLog.sln
+      
+    - name: Build
+      run: dotnet build GameFrameX.ChangedLog.sln --no-restore
+      
+    - name: Generate Changelog
+      run: dotnet run --project src/ChangelogGenerator.csproj
+      
+    - name: Commit and push changelog
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git add Changelog.md
+        git diff --staged --quiet || git commit -m "Update changelog for $(git describe --tags --abbrev=0)"
+        git push
