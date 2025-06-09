@@ -29,10 +29,7 @@ public class ChangelogService
         }
         else
         {
-            // 处理未发布的更改（如果有的话）
-            await AddUnreleasedChangesAsync(changelog, tags.First().Name);
-
-            // 处理每个标签之间的更改
+            // 只处理每个标签之间的更改，不处理未发布的内容
             for (int i = 0; i < tags.Count; i++)
             {
                 var currentTag = tags[i];
@@ -46,43 +43,16 @@ public class ChangelogService
         Console.WriteLine($"Changelog generated successfully: {outputPath}");
     }
 
-    private Task AddUnreleasedChangesAsync(StringBuilder changelog, string lastTagName)
-    {
-        try
-        {
-            var unreleasedCommits = _gitService.GetCommitsSinceLastTag(lastTagName);
-
-            if (unreleasedCommits.Any())
-            {
-                changelog.AppendLine("## [Unreleased]");
-                changelog.AppendLine();
-
-                foreach (var commit in unreleasedCommits)
-                {
-                    changelog.AppendLine($"- {commit.Message} ([{commit.ShortSha}](../../commit/{commit.Sha}))");
-                }
-
-                changelog.AppendLine();
-            }
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Warning: Could not get unreleased changes: {ex.Message}");
-        }
-
-        return Task.CompletedTask;
-    }
-
     private Task AddTagSectionAsync(StringBuilder changelog, GitTag currentTag, GitTag? previousTag)
     {
         changelog.AppendLine($"## [{currentTag.Name}] - {currentTag.Date:yyyy-MM-dd}");
         changelog.AppendLine();
 
-        if (!string.IsNullOrEmpty(currentTag.Message))
-        {
-            changelog.AppendLine($"**Release Notes:** {currentTag.Message}");
-            changelog.AppendLine();
-        }
+        // if (!string.IsNullOrEmpty(currentTag.Message))
+        // {
+        //     changelog.AppendLine($"**Release Notes:** {currentTag.Message}");
+        //     changelog.AppendLine();
+        // }
 
         try
         {
@@ -90,20 +60,23 @@ public class ChangelogService
 
             if (commits.Any())
             {
-                // 按类型分组提交（可选的增强功能）
-                var groupedCommits = GroupCommitsByType(commits);
+                // 按照[]中的内容分组提交
+                var groupedCommits = GroupCommitsByBracketContent(commits);
 
                 foreach (var group in groupedCommits)
                 {
-                    if (group.Key != "Other")
+                    if (!string.IsNullOrEmpty(group.Key))
                     {
                         changelog.AppendLine($"### {group.Key}");
                         changelog.AppendLine();
                     }
 
-                    foreach (var commit in group.Value)
+                    // 合并相同消息内容的提交
+                    var mergedCommits = MergeCommitsByMessage(group.Value);
+
+                    foreach (var mergedCommit in mergedCommits)
                     {
-                        changelog.AppendLine($"- {commit.Message} ([{commit.ShortSha}](../../commit/{commit.Sha}))");
+                        changelog.AppendLine($"- {mergedCommit.Message} {mergedCommit.CommitLinks}");
                     }
 
                     changelog.AppendLine();
@@ -124,39 +97,120 @@ public class ChangelogService
         return Task.CompletedTask;
     }
 
-    private Dictionary<string, List<CommitInfo>> GroupCommitsByType(List<CommitInfo> commits)
+    /// <summary>
+    /// 根据提交消息中[]内的内容进行分组
+    /// 例如: "[feat] 添加新功能" -> 分组到 "feat"
+    /// </summary>
+    /// <param name="commits">提交列表</param>
+    /// <returns>按[]内容分组的提交字典</returns>
+    private Dictionary<string, List<CommitInfo>> GroupCommitsByBracketContent(List<CommitInfo> commits)
     {
-        var groups = new Dictionary<string, List<CommitInfo>>
-        {
-            ["Features"] = new(),
-            ["Bug Fixes"] = new(),
-            ["Documentation"] = new(),
-            ["Other"] = new()
-        };
+        var groups = new Dictionary<string, List<CommitInfo>>();
 
         foreach (var commit in commits)
         {
-            var message = commit.Message.ToLowerInvariant();
+            var bracketContent = ExtractBracketContent(commit.Message);
+            var groupKey = string.IsNullOrEmpty(bracketContent) ? "Other" : bracketContent;
 
-            if (message.StartsWith("feat") || message.Contains("feature") || message.Contains("add"))
+            if (!groups.ContainsKey(groupKey))
             {
-                groups["Features"].Add(commit);
+                groups[groupKey] = new List<CommitInfo>();
             }
-            else if (message.StartsWith("fix") || message.Contains("bug") || message.Contains("error"))
-            {
-                groups["Bug Fixes"].Add(commit);
-            }
-            else if (message.StartsWith("docs") || message.Contains("documentation") || message.Contains("readme"))
-            {
-                groups["Documentation"].Add(commit);
-            }
-            else
-            {
-                groups["Other"].Add(commit);
-            }
+
+            groups[groupKey].Add(commit);
         }
 
-        // 移除空组
-        return groups.Where(g => g.Value.Any()).ToDictionary(g => g.Key, g => g.Value);
+        // 按组名排序，但将"Other"放在最后
+        var sortedGroups = groups
+            .OrderBy(g => g.Key == "Other" ? "zzz" : g.Key)
+            .ToDictionary(g => g.Key, g => g.Value);
+
+        return sortedGroups;
+    }
+
+    /// <summary>
+    /// 合并相同消息内容的提交记录
+    /// </summary>
+    /// <param name="commits">提交列表</param>
+    /// <returns>合并后的提交信息</returns>
+    private List<MergedCommitInfo> MergeCommitsByMessage(List<CommitInfo> commits)
+    {
+        var mergedCommits = new List<MergedCommitInfo>();
+        var groupedByMessage = commits
+            .GroupBy(c => FormatCommitMessage(c.Message))
+            .ToList();
+
+        foreach (var group in groupedByMessage)
+        {
+            var commitList = group.ToList();
+            var commitLinks = string.Join(" ", commitList.Select(c => $"([{c.ShortSha}](../../commit/{c.Sha}))"));
+            
+            mergedCommits.Add(new MergedCommitInfo
+            {
+                Message = group.Key,
+                CommitLinks = commitLinks,
+                CommitCount = commitList.Count
+            });
+        }
+
+        return mergedCommits;
+    }
+
+    /// <summary>
+    /// 提取提交消息中[]内的内容
+    /// 例如: "[feat] 添加新功能" -> "feat"
+    /// </summary>
+    /// <param name="message">提交消息</param>
+    /// <returns>[]内的内容，如果没有则返回空字符串</returns>
+    private string ExtractBracketContent(string message)
+    {
+        if (string.IsNullOrEmpty(message))
+            return string.Empty;
+
+        var openBracketIndex = message.IndexOf('[');
+        var closeBracketIndex = message.IndexOf(']');
+
+        if (openBracketIndex == -1 || closeBracketIndex == -1 || closeBracketIndex <= openBracketIndex)
+            return string.Empty;
+
+        return message.Substring(openBracketIndex + 1, closeBracketIndex - openBracketIndex - 1).Trim();
+    }
+
+    /// <summary>
+    /// 格式化提交消息，移除]之后第一个空格之前的内容
+    /// 例如: "[scope] message" -> "message"
+    /// </summary>
+    /// <param name="message">原始提交消息</param>
+    /// <returns>格式化后的消息</returns>
+    private string FormatCommitMessage(string message)
+    {
+        if (string.IsNullOrEmpty(message))
+            return message;
+
+        var closeBracketIndex = message.IndexOf(']');
+        if (closeBracketIndex == -1)
+            return message;
+
+        // 找到]之后的第一个空格
+        var searchStart = closeBracketIndex + 1;
+        if (searchStart >= message.Length)
+            return message;
+
+        var firstSpaceIndex = message.IndexOf(' ', searchStart);
+        if (firstSpaceIndex == -1)
+            return message;
+
+        // 返回第一个空格之后的内容，去掉前后空白
+        return message.Substring(firstSpaceIndex + 1).Trim();
+    }
+
+    /// <summary>
+    /// 合并后的提交信息
+    /// </summary>
+    private class MergedCommitInfo
+    {
+        public string Message { get; set; } = string.Empty;
+        public string CommitLinks { get; set; } = string.Empty;
+        public int CommitCount { get; set; }
     }
 }
